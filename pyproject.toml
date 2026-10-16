@@ -1,0 +1,21 @@
+[project]
+name = "papel"
+version = "0.1.0"
+description = "Print a file as a page of dots and recover it from a scan"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pillow",
+    "pymupdf",
+    "reedsolo",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+papel = "papel.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
