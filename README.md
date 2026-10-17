@@ -1,35 +1,65 @@
 # Papel
 
-Guarda un archivo en una hoja A4 para imprimir y lo recupera desde un escaneo.
+Print a file as a grid of dots on A4, then recover it from a scan.
 
-El PDF no es el backup. Es la página que va a la impresora. Después se escanea en gris (o en color, si se usó ese modo) a 300 dpi y `decode` reconstruye el archivo. El orden de las hojas no importa. Si falta una, no escribe un archivo a medias.
+The PDF is the sheet you send to the printer. The backup is the paper. Scan that sheet at 300 dpi and `papel decode` rebuilds the file. Sheet order does not matter. If a sheet is missing, nothing is written.
 
-## Uso
+This is a new format. It does not read PaperBack bitmaps.
+
+## Install
+
+Python 3.11 or newer.
 
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ".[test]"
-.venv/bin/papel encode ARCHIVO -o backup.pdf
-.venv/bin/papel decode escaneo.png otro.png -o ARCHIVO
 ```
 
-`decode` también acepta el PDF, para probar sin impresora: lo rasteriza a 300 dpi.
-
-Modos:
-
-- `bw` (el que usa por defecto). Negro sobre blanco. Es el que imprime una láser.
-- `cmy`. Una capa binaria por tinta (cian, magenta, amarillo). En la medición con ruido de papel mete unas tres veces más bytes.
+## Print
 
 ```bash
-.venv/bin/papel encode ARCHIVO -o backup.pdf --mode cmy
+.venv/bin/papel encode FILE -o backup.pdf
 ```
 
-El punto por defecto mide 0,45 mm. A 300 dpi son unos 5 píxeles por punto, por encima del límite de un muestreo por punto. En esa densidad una hoja en blanco y negro lleva unos 25 KB y una en CMY unos 77 KB, después de la corrección de errores. Con 0,40 mm el mismo ruido ya no alcanza.
+That writes one or more A4 pages. A laser printer can use the default, black on white. For a color printer:
 
-## Pruebas
+```bash
+.venv/bin/papel encode FILE -o backup.pdf --mode cmy
+```
+
+`cmy` stores one bit in each of cyan, magenta, and yellow. At the default dot size it holds about three times as much as black and white, including a small misregistration between inks.
+
+| Mode | Use | Payload per A4 page |
+| --- | --- | --- |
+| `bw` (default) | Laser, grayscale scan | 25,768 bytes |
+| `cmy` | Color printer, color scan | 77,504 bytes |
+
+A file larger than one page becomes several sheets. The whole file is compressed with zlib when that makes it smaller. Each page carries a CRC of the original file and Reed-Solomon parity (32 bytes per 255).
+
+The default dot is 0.45 mm (`--module-mm`). At 300 dpi that is about five pixels per dot. Dots smaller than 0.40 mm do not survive the print-and-scan noise used in the tests. The scanner needs at least three pixels per dot (0.254 mm at 300 dpi); the default stays above that.
+
+A short file leaves most cells white, so the page looks almost blank. The dots that do exist are spread across the sheet so a stain does not land on the same correction block. A file that fills the page looks dense. `ejemplo.pdf` is that case: page 1 is black and white, page 2 is color.
+
+## Scan
+
+Scan at 300 dpi. Use grayscale for `bw` and color for `cmy`. Keep the whole page, including the corner marks and the white margin.
+
+```bash
+.venv/bin/papel decode scan.png another.png -o FILE
+```
+
+Images can be PNG, JPEG, or TIFF. A PDF is accepted too: each page is rasterized at 300 dpi, which is how you can try a round trip without a printer.
+
+```bash
+.venv/bin/papel decode backup.pdf -o FILE
+```
+
+Corners are finder marks. The top edge and the left edge are timing tracks, and they fix the rotation. Duplicate scans of the same sheet are fine. Two different files in one command are not.
+
+## Tests
 
 ```bash
 .venv/bin/pytest
 ```
 
-El banco rasteriza el PDF y le aplica desenfoque, ruido, rotación, desplazamiento y una mancha. En color, además, un desregistro de 0,1 mm entre tintas. Un daño más grande tiene que fallar sin devolver datos incorrectos.
+The tests rasterize the PDF at 300 dpi and add blur, noise, rotation, shift, and a stain. Color pages also get 0.1 mm of ink misregistration. A heavier damage profile must fail instead of returning a wrong file.
